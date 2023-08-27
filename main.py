@@ -4,9 +4,12 @@ from bs4 import BeautifulSoup
 from urllib.request import Request, urlopen
 import pickle
 import supabase_handler
+import email_handler
+import datetime
 
-debug_flag = 1
+debug_flag = 0
 page_url = 'https://hindenburgresearch.com'
+script_start_datetime = datetime.datetime.now().strftime('%m-%d-%Y: %H:%M:%S')
 
 def get_url_html(page_url=page_url):
     req = Request(url=page_url, headers={'User-Agent': 'Mozilla/5.0'})
@@ -39,11 +42,14 @@ def read_html_pickle():
 # get all articles in the SUPABASE DB
 def get_supabase_post_list():
     query_result = supabase_handler.get_post_id()
+    print('Query result: ', query_result)
     supabase_post_list = list()
 
-    for q in query_result:
-        supabase_post_list.append(q['post_id'])
-    
+    if query_result is not None and len(query_result) > 0:
+        for q in query_result:
+            print('This is the post ID in query results', q)
+            supabase_post_list.append(q['post_id'])
+
     return supabase_post_list
 
 '''
@@ -95,37 +101,55 @@ def generate_post_attributes(soup):
     
     #print('===========>', title)
     #rint(entry_date)
+
+def notify_users_email(page_url, new_post_title_list):
+    email_subject = 'Vishal\'s scraper: New article(s) on Hidenburg research'
+    email_body = 'Hello my friend. <p>A new article(s) have been detected on <a>{page_url}</a></p>.<br>Here are the title(s)\n{new_post_title_list}<br><br>Please visit the page to read the post(s).'.format(page_url=page_url, new_post_title_list=new_post_title_list)
+    print('Sending email to the receipients....')        
+    email_handler.send_email(subject = email_subject, html_content = email_body)
+    print('Email sent to the recipients!')        
     
+
 if __name__ == "__main__": 
 
     if debug_flag == 1:
+        print('DEBUG mode is on. Reading from Pickle...')
         html_pkl = read_html_pickle()
         soup = BeautifulSoup(html_pkl, 'html.parser')
     else:
         html_resp = get_url_html()
+        print('Length of the HTML response: ', len(html_resp))
         soup = BeautifulSoup(html_resp, 'html.parser')
 
     article_dict = generate_post_attributes(soup)
 
     supabase_post_list = get_supabase_post_list()
 
-    print(supabase_post_list)
+    print('This is the list of articles in the DB:', supabase_post_list)
 
+    new_post_title_list = list()
     ## check if the article scraped already exists in the database
     for post_id in article_dict.keys():
-        print(post_id)
         if post_id in supabase_post_list:
             # post already exists, do nothing.
             print('post-id already exists')
         else:
             # post doesn't exist in SUPABASE. Update and send notification
+           print('There is a new post ID!', post_id)
            post_id_data = article_dict[post_id]
+           # append to the list of new post titles
+           new_post_title_list.append(post_id_data['post_title'])
+           # Update the DB
            supabase_handler.update_articles_post(post_id = post_id,
                                                  post_title=post_id_data['post_title'],
                                                  entry_date=post_id_data['entry_date'],
                                                  update_date=post_id_data['update_date'])
+    
+    print('New post title list: ', new_post_title_list)
+    if len(new_post_title_list) > 0:
+        notify_users_email(page_url, new_post_title_list)
            
-    
+    print('Updating the run datetime in DB')
     supabase_handler.update_run()
-    
-    #print(article_dict.keys())
+    email_handler.send_email('Daily scraper update', 'Hidenburg scraper was run today at {script_start_datetime}'.format(script_start_datetime=script_start_datetime), ['vishalvatnani@gmail.com'])
+    print('Script finished')
