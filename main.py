@@ -5,11 +5,16 @@ from urllib.request import Request, urlopen
 import pickle
 import supabase_handler
 import email_handler
+import send_welcome_email
+import send_update_email
 import datetime
 
 debug_flag = 0
-page_url = 'https://hindenburgresearch.com'
+
 script_start_datetime = datetime.datetime.now().strftime('%m-%d-%Y: %H:%M:%S')
+print('Script has started')
+print('Debug flag is set to: ', debug_flag)
+page_url = 'https://hindenburgresearch.com'
 
 def get_url_html(page_url=page_url):
     req = Request(url=page_url, headers={'User-Agent': 'Mozilla/5.0'})
@@ -102,16 +107,13 @@ def generate_post_attributes(soup):
     #print('===========>', title)
     #rint(entry_date)
 
-def notify_users_email(page_url, new_post_title_list):
-    email_subject = 'Vishal\'s scraper: New article(s) on Hidenburg research'
-    email_body = 'Hello my friend. <p>A new article(s) have been detected on <a>{page_url}</a></p>.<br>Here are the title(s)\n{new_post_title_list}<br><br>Please visit the page to read the post(s).'.format(page_url=page_url, new_post_title_list=new_post_title_list)
+def notify_users_email(new_post_title_list):
     print('Sending email to the receipients....')        
-    email_handler.send_email(subject = email_subject, html_content = email_body)
-    print('Email sent to the recipients!')        
-    
+    send_update_email.send_email_update_all(new_post_title_list)
+    print('Email sent to the recipients!')
+    return None
 
-if __name__ == "__main__": 
-
+if __name__ == "__main__":
     if debug_flag == 1:
         print('DEBUG mode is on. Reading from Pickle...')
         html_pkl = read_html_pickle()
@@ -124,6 +126,9 @@ if __name__ == "__main__":
     article_dict = generate_post_attributes(soup)
 
     supabase_post_list = get_supabase_post_list()
+    
+    # Send welcome emails to users who are new
+    send_welcome_email.welcome_email_checker_sender()
 
     print('This is the list of articles in the DB:', supabase_post_list)
 
@@ -139,7 +144,7 @@ if __name__ == "__main__":
            post_id_data = article_dict[post_id]
            # append to the list of new post titles
            new_post_title_list.append(post_id_data['post_title'])
-           # Update the DB
+           # Update the DB with new posts
            supabase_handler.update_articles_post(post_id = post_id,
                                                  post_title=post_id_data['post_title'],
                                                  entry_date=post_id_data['entry_date'],
@@ -147,9 +152,11 @@ if __name__ == "__main__":
     
     print('New post title list: ', new_post_title_list)
     if len(new_post_title_list) > 0:
-        notify_users_email(page_url, new_post_title_list)
+        # If there are new posts, notify users
+        notify_users_email(new_post_title_list)
            
     print('Updating the run datetime in DB')
     supabase_handler.update_run()
-    email_handler.send_email('Daily scraper update', 'Hidenburg scraper was run today at {script_start_datetime}'.format(script_start_datetime=script_start_datetime), ['vishalvatnani@gmail.com'])
+    # send the daily update email to the default email
+    email_handler.send_email('Daily scraper operational update', 'Hidenburg scraper was run today at {script_start_datetime}'.format(script_start_datetime=script_start_datetime))
     print('Script finished')
