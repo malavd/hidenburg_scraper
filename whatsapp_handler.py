@@ -1,8 +1,8 @@
 from twilio.rest import Client
 import os
 
-account_sid = 'AC72750e0f84b76368e228a369ecafbacb'
-auth_token = '2667ec0be66e47756d8e3f6179c04286'
+account_sid = 'xyz'
+auth_token = 'xyz'
 client = Client(account_sid, auth_token)   # Create a Twilio client
 
 # read the default email list
